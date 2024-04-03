@@ -8,7 +8,7 @@ num_dists = 14
 rng_seed = 454190
 pop_dev = 0.02
 gamma = 0 #0 is uniform on forests; 1 is uniform on partitions
-steps = 1000
+steps = 10
 edge_weights= "connections"
 
 pctGraphPath = joinpath("..", "test", "test_graphs", "NC_pct21.json")
@@ -31,11 +31,14 @@ measure = Measure(gamma)
 # to add elements to the measure
 # push_measure!(measure, get_isoperimetric_score, 0.45)
 
-output_file_path = joinpath("output", "NC", 
-                            "atlas_gamma"*string(gamma)*".jsonl")
-writer = Writer(measure, constraints, partition, output_file_path)
+# output_file_path = "./atlas_gamma"*string(gamma)*".jsonl.bz2"
+# output_file_io = smartOpen(output_file_path, "w")
+# writer = Writer(measure, constraints, partition, output_file_io)
+writer = Writer(measure, constraints, partition, stdout)
+
+
 push_writer!(writer, get_log_spanning_forests)
 push_writer!(writer, get_isoperimetric_scores)
 
 run_metropolis_hastings!(partition, proposal, measure, steps, rng,
-                         writer=writer, output_freq=10);
+                         writer=writer, output_freq=1);
