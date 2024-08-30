@@ -15,8 +15,8 @@ function get_adjacent_tree_dists(
             end
             if adjacent
                 if !exists_hierarchical_tree(partition.district_to_nodes[di],
-                                             partition.district_to_nodes[dj],
-                                             partition.graph.num_levels)
+                    partition.district_to_nodes[dj],
+                    partition.graph.num_levels)
                     continue
                 end
                 # println("searching on ", di, " ", dj, " ", total_adjacent_dists)
@@ -61,7 +61,7 @@ function sample_adjacent_districts_randomly(
 )
     adj_dists = get_adjacent_tree_dists(partition, constraints)
     dist_pair = rand(rng, adj_dists)
-    return [dist_pair.first, dist_pair.second], 1.0/length(adj_dists)
+    return [dist_pair.first, dist_pair.second], 1.0 / length(adj_dists)
     # total_adjacent_dists = get_total_adjacent_dists(partition, constraints)
 
     # cum_sum = 0
@@ -104,8 +104,8 @@ end
 
 """"""
 function exists_hierarchical_tree(
-    district1::Dict{Tuple{Vararg{String}}, Any},
-    district2::Dict{Tuple{Vararg{String}}, Any},
+    district1::Dict{Tuple{Vararg{String}},Any},
+    district2::Dict{Tuple{Vararg{String}},Any},
     num_levels::Int,
     cur_level::Int=1
 )
@@ -119,11 +119,11 @@ function exists_hierarchical_tree(
             if num_of_shared > 1
                 return false
             end
-            if cur_level != num_levels-1
+            if cur_level != num_levels - 1
                 check_finer = exists_hierarchical_tree(district1[node],
-                                                        district2[node],
-                                                        num_levels,
-                                                        cur_level+1)
+                    district2[node],
+                    num_levels,
+                    cur_level + 1)
                 if !check_finer
                     return false
                 end
@@ -142,7 +142,7 @@ function check_prestep_constraints(
 )
     if haskey(constraints, ConstrainDiscontinuousTraversals)
         if !satisfies_constraint(constraints[ConstrainDiscontinuousTraversals],
-                                 partition, subgraph)
+            partition, subgraph)
             return false
         end
     end
@@ -164,7 +164,7 @@ function get_prob_of_new_dists(
     constraints::Dict,
     node_sets_w_pops,
 )
-    old_dists = Dict(cd=>partition.district_to_nodes[cd]
+    old_dists = Dict(cd => partition.district_to_nodes[cd]
                      for cd in changed_districts)
     partition.district_to_nodes[changed_districts[1]] =
         node_sets_w_pops[1][1][()]
@@ -175,7 +175,7 @@ function get_prob_of_new_dists(
     # total_adjacent_dists = get_total_adjacent_dists(partition, constraints)
     # prob_of_new_dists = 1.0/total_adjacent_dists
     adj_dists = get_adjacent_tree_dists(partition, constraints)
-    prob_of_new_dists = 1.0/length(adj_dists)
+    prob_of_new_dists = 1.0 / length(adj_dists)
 
     for (od, ons) in old_dists
         partition.district_to_nodes[od] = ons
@@ -193,7 +193,7 @@ function get_log_linking_edge_prob_tree_space(
     cross_district_edges = partition.cross_district_edges
     district_to_nodes = partition.district_to_nodes
 
-    log_linking_edge_prob = 0
+    log_linking_edge_prob, internal_log_linking_edge_prob = 0, 0
 
     num_levels = partition.graph.num_levels
 
@@ -206,22 +206,27 @@ function get_log_linking_edge_prob_tree_space(
             else
                 max_connections = maximum(cross_district_edges[di, dj, ii]
                                           for ii = 1:num_levels)
-                adjacent_huh = max_connections!=0
+                adjacent_huh = max_connections != 0
                 if !adjacent_huh
                     continue
                 elseif !exists_hierarchical_tree(district_to_nodes[di],
-                                                 district_to_nodes[dj],
-                                                 num_levels)
+                    district_to_nodes[dj],
+                    num_levels)
                     continue
                 end
                 level = maximum(ii for ii = 1:num_levels
                                 if cross_district_edges[di, dj, ii] > 0)
                 choices = cross_district_edges[di, dj, level]
-                log_linking_edge_prob -= log(choices)
+                # @show di, dj, choices
+                if di_nin || dj_nin
+                    log_linking_edge_prob -= log(choices)
+                else
+                    internal_log_linking_edge_prob -= log(choices)
+                end
             end
         end
     end
-    return log_linking_edge_prob
+    return log_linking_edge_prob, internal_log_linking_edge_prob
 end
 
 """"""
@@ -231,15 +236,12 @@ function get_log_linking_edge_ratio_tree_space(
     changed_districts::Vector{Int},
     node_sets_w_pops,
 )
-    if measure.gamma == 0
-        return 0
-    end
     num_levels = partition.graph.num_levels
 
-    log_l_edge_prob_cur = get_log_linking_edge_prob_tree_space(partition,
-                                                              changed_districts)
+    llepc = get_log_linking_edge_prob_tree_space(partition, changed_districts)
+    log_l_edge_prob_cur, internal_log_l_edge_prob_cur = llepc
 
-    old_dists = Dict(cd=>partition.district_to_nodes[cd]
+    old_dists = Dict(cd => partition.district_to_nodes[cd]
                      for cd in changed_districts)
     for ii = 1:length(changed_districts)
         partition.district_to_nodes[changed_districts[ii]] =
@@ -247,8 +249,8 @@ function get_log_linking_edge_ratio_tree_space(
     end
     partition.node_to_district = construct_node_map(partition.district_to_nodes)
     set_cross_district_edges!(partition, changed_districts)
-    log_l_edge_prob_proposed = get_log_linking_edge_prob_tree_space(partition,
-                                                              changed_districts)
+    llepp = get_log_linking_edge_prob_tree_space(partition, changed_districts)
+    log_l_edge_prob_proposed, internal_log_l_edge_prob_proposed = llepp
 
     for (od, ons) in old_dists
         partition.district_to_nodes[od] = ons
@@ -256,7 +258,9 @@ function get_log_linking_edge_ratio_tree_space(
     partition.node_to_district = construct_node_map(partition.district_to_nodes)
     set_cross_district_edges!(partition, changed_districts)
 
-    return log_l_edge_prob_proposed - log_l_edge_prob_cur
+    llepr = log_l_edge_prob_proposed - log_l_edge_prob_cur
+    illepr = internal_log_l_edge_prob_proposed - internal_log_l_edge_prob_cur
+    return llepr, illepr
 end
 
 """"""
@@ -280,12 +284,12 @@ function get_log_linking_edge_prob_partition_space(
             else
                 max_connections = maximum(cross_district_edges[di, dj, ii]
                                           for ii = 1:num_levels)
-                adjacent_huh = max_connections!=0
+                adjacent_huh = max_connections != 0
                 if !adjacent_huh
                     continue
                 elseif !exists_hierarchical_tree(district_to_nodes[di],
-                                                  district_to_nodes[dj],
-                                                  num_levels)
+                    district_to_nodes[dj],
+                    num_levels)
                     continue
                 end
                 level = maximum(ii for ii = 1:num_levels
@@ -311,9 +315,9 @@ function get_log_linking_edge_ratio_partition_space(
     num_levels = partition.graph.num_levels
 
     log_choices_cur = get_log_linking_edge_prob_partition_space(partition,
-                                                              changed_districts)
+        changed_districts)
 
-    old_dists = Dict(cd=>partition.district_to_nodes[cd]
+    old_dists = Dict(cd => partition.district_to_nodes[cd]
                      for cd in changed_districts)
     for ii = 1:length(changed_districts)
         partition.district_to_nodes[changed_districts[ii]] =
@@ -322,7 +326,7 @@ function get_log_linking_edge_ratio_partition_space(
     partition.node_to_district = construct_node_map(partition.district_to_nodes)
     set_cross_district_edges!(partition, changed_districts)
     log_choices_proposed = get_log_linking_edge_prob_partition_space(partition,
-                                                              changed_districts)
+        changed_districts)
 
     for (od, ons) in old_dists
         partition.district_to_nodes[od] = ons
@@ -356,12 +360,12 @@ function get_log_linking_edge_prob_adjacent(
             else
                 max_connections = maximum(cross_district_edges[di, dj, ii]
                                           for ii = 1:num_levels)
-                adjacent_huh = max_connections!=0
+                adjacent_huh = max_connections != 0
                 if !adjacent_huh
                     continue
                 elseif !exists_hierarchical_tree(district_to_nodes[di],
-                                                  district_to_nodes[dj],
-                                                  num_levels)
+                    district_to_nodes[dj],
+                    num_levels)
                     continue
                 end
                 # edge, prob? = sample_linking_edge(partition, di, dj, rng)
@@ -393,9 +397,9 @@ function get_log_linking_edge_ratio_adjacent(
     num_levels = partition.graph.num_levels
 
     log_prob_cur = get_log_linking_edge_prob_adjacent(partition, measure,
-                                                      rng, changed_districts)
+        rng, changed_districts)
 
-    old_dists = Dict(cd=>partition.district_to_nodes[cd]
+    old_dists = Dict(cd => partition.district_to_nodes[cd]
                      for cd in changed_districts)
     for ii = 1:length(changed_districts)
         partition.district_to_nodes[changed_districts[ii]] =
@@ -404,8 +408,8 @@ function get_log_linking_edge_ratio_adjacent(
     partition.node_to_district = construct_node_map(partition.district_to_nodes)
     set_cross_district_edges!(partition, changed_districts)
     log_prob_proposed = get_log_linking_edge_prob_adjacent(partition, measure,
-                                                           rng,
-                                                           changed_districts)
+        rng,
+        changed_districts)
 
     for (od, ons) in old_dists
         partition.district_to_nodes[od] = ons
@@ -435,7 +439,7 @@ function get_log_tree_count_ratio(
         sg2 = district_graph₂.graphs_by_level[ii][coarse_node]
         log_count1 = log_nspanning(sg1)
         log_count2 = log_nspanning(sg2)
-        log_tree_count_ratio -= log_count1+log_count2
+        log_tree_count_ratio -= log_count1 + log_count2
 
         if ii > 1
             joint_node_set = get_node_set(subgraph.node_set, coarse_node)
@@ -482,16 +486,16 @@ function get_log_tree_count_ratio(
     subgraph₂ = MultiLevelSubGraph(graph, node_sets_w_pops[2][1][()])
 
     log_tree_count_ratio += get_log_tree_count_ratio(subgraph₁, subgraph₂,
-                                                     subgraph, node_tree_counts,
-                                                     edge)
+        subgraph, node_tree_counts,
+        edge)
 
     subgraph₁ = partition.subgraphs[changed_districts[1]]
     subgraph₂ = partition.subgraphs[changed_districts[2]]
 
     old_edge = collect(old_edges[1])
     log_tree_count_ratio -= get_log_tree_count_ratio(subgraph₁, subgraph₂,
-                                                     subgraph, node_tree_counts,
-                                                     old_edge)
+        subgraph, node_tree_counts,
+        old_edge)
 
     return log_tree_count_ratio
 end
@@ -515,7 +519,7 @@ function set_node_sets_order( #currently unused
     intersection11 = intersect_node_sets(cur_node_set₁, prop_node_set₁)
     common_pop_11 = sum_node_data(partition.graph, intersection11, pop_col)
 
-    h11 = cur_pop_1 + prop_pop_1 - 2*common_pop_11
+    h11 = cur_pop_1 + prop_pop_1 - 2 * common_pop_11
     h12 = subgraph_pop - h11
     if h12 < h11
         return h12, (node_sets_w_pops[2], node_sets_w_pops[1])
@@ -536,16 +540,16 @@ function set_node_sets_order_general(
     cur_node_sets = [partition.district_to_nodes[changed_districts[i]] for i = 1:k]
     prop_node_sets = [node_sets_w_pops[i][1][()] for i = 1:k]
     pop_col = partition.graph.graphs_by_level[1].pop_col
-    pop_intersections = Array{Float64,2}(undef,k,k)
+    pop_intersections = Array{Float64,2}(undef, k, k)
     for i = 1:k
         for j = 1:k
             intersection = intersect_node_sets(cur_node_sets[i], prop_node_sets[j])
-            pop_intersections[i,j] = sum_node_data(partition.graph, intersection, pop_col)
+            pop_intersections[i, j] = sum_node_data(partition.graph, intersection, pop_col)
         end
     end
-    neg_pop_intersections = pop_intersections.*-1 #flip sign since hungarian() minimizes
+    neg_pop_intersections = pop_intersections .* -1 #flip sign since hungarian() minimizes
     assignment = hungarian(neg_pop_intersections)
-    return subgraph_pop+assignment[2], Tuple(node_sets_w_pops[assignment[1][i]] for i = 1:k)
+    return subgraph_pop + assignment[2], Tuple(node_sets_w_pops[assignment[1][i]] for i = 1:k)
 end
 
 """"""
@@ -564,14 +568,14 @@ function forest_recom2!(
     # @show changed_districts
 
     if !check_prestep_constraints(subgraph, partition, constraints,
-                                 changed_districts)
+        changed_districts)
         return 0, nothing
     end
 
     multiscale_cuttable_tree = MultiScaleCuttableTree(graph.num_levels)
 
     construct_cuttable_tree!(multiscale_cuttable_tree, subgraph, constraints,
-                             rng=rng)
+        rng=rng)
 
     proposed_cut = cut_edge(multiscale_cuttable_tree, subgraph, rng)
     node_sets_w_pops, edge, prob_edge = proposed_cut
@@ -585,14 +589,14 @@ function forest_recom2!(
     end
     # check hamming distances
     hamming, node_sets_w_pops = set_node_sets_order_general(partition, subgraph,
-                                                            changed_districts,
-                                                            node_sets_w_pops)
+        changed_districts,
+        node_sets_w_pops)
     if hamming == 0
         return 0, nothing
     end
 
-    old_tree = sample_merged_tree2(changed_districts, subgraph, partition, 
-                                   constraints, rng)
+    old_tree = sample_merged_tree2(changed_districts, subgraph, partition,
+        constraints, rng)
     old_multiscale_cuttable_tree, prob_old_edge = old_tree
 
     if prob_old_edge == 0
@@ -601,51 +605,30 @@ function forest_recom2!(
     end
 
     prob_of_new_dists = get_prob_of_new_dists(partition, changed_districts,
-                                              constraints, node_sets_w_pops)
+        constraints, node_sets_w_pops)
 
-    partialFwdPrpProb = prob_of_dists*prob_edge
-    partialBckPrpProb = prob_of_new_dists*prob_old_edge
-    p = partialBckPrpProb/partialFwdPrpProb
-    # println("partialBckPrpProb = ", prob_of_new_dists, " * ", prob_old_edge)
-    # println("partialFwdPrpProb = ", prob_of_dists, " * ", prob_edge)
+    partialFwdPrpProb = prob_of_dists * prob_edge
+    partialBckPrpProb = prob_of_new_dists * prob_old_edge
+    p = partialBckPrpProb / partialFwdPrpProb
+
+    llep_ratios = get_log_linking_edge_ratio_tree_space(partition, measure,
+        changed_districts,
+        node_sets_w_pops)
+    log_linking_edge_ratio, int_log_linking_edge_ratio = llep_ratios
+    p *= exp(-log_linking_edge_ratio)
 
     if measure.gamma != 0
-        log_linking_edge_ratio = get_log_linking_edge_ratio_tree_space(
-                                                            partition, measure,
-                                                            changed_districts,
-                                                            node_sets_w_pops)
         old_edge = old_multiscale_cuttable_tree[2]
         log_tree_count_ratio = get_log_tree_count_ratio(partition, measure,
-                                                        subgraph,
-                                                        changed_districts,
-                                                        proposed_cut, old_edge)
-        p*=exp(measure.gamma*(log_linking_edge_ratio + log_tree_count_ratio))
-
-        # absorbe into the log_linkin_edge_ratio for now; can do until move to 
-        # weighted graphs
-        # adjacent_edge_ratio = get_log_linking_edge_ratio_adjacent(
-        #                                                     partition, measure,
-        #                                                     changed_districts,
-        #                                                     node_sets_w_pops,
-        #                                                     rng)
-        # p*=exp(measure.gamma*adjacent_edge_ratio)
+            subgraph,
+            changed_districts,
+            proposed_cut, old_edge)
+        p *= exp(measure.gamma * log_tree_count_ratio)
     end
-
-    # if measure.gamma != 1
-    #     log_linking_edge_ratio = get_log_linking_edge_ratio_partition_space(
-    #                                                         partition, measure,
-    #                                                         changed_districts,
-    #                                                         node_sets_w_pops)
-    #     # println("p_cur = ", p, " and log_linking_edge_ratio = ", log_linking_edge_ratio)
-    #     # println("modifying with linked edge measure on partitions ", p, " x ", exp((1-measure.gamma)*log_linking_edge_ratio))
-    #     p*=exp((1-measure.gamma)*log_linking_edge_ratio)
-    # end
-
-    # println("p and info ", p, " ", log_linking_edge_ratio, " ", log_tree_count_ratio)
-    # P(x'|x)pi(x) = P(x|x')pi(x')
-    # A(x'|x)Q(x'|x)pi(x) = A(x|x')Q(x|x')pi(x')
-    # A(x'|x) = min(1, Q(x|x')pi(x'))
-    #                  Q(x'|x)pi(x))
+    if measure.alpha != 0
+        tot_edge_ratio = log_linking_edge_ratio + int_log_linking_edge_ratio
+        p *= exp(measure.alpha * tot_edge_ratio)
+    end
 
     return p, (changed_districts, node_sets_w_pops, edge)
 end
@@ -664,17 +647,17 @@ function specified_edge_probability(
 
     edge_weight = get_edge_weight(subgraph, n1, n2)
     possible_edges = get_edge_weight(subgraph, n1, n2[1:length(n1)])
-    return edge_weight/possible_edges
+    return edge_weight / possible_edges
 end
 
 """"""
 function compute_proposed_tree_ratio(
     subgraph::MultiLevelSubGraph,
     old_multiscale_cuttable_tree::Tuple{Vector{MultiScaleCuttableTree},
-                                         Vector{Set{T}}},
+        Vector{Set{T}}},
     new_multiscale_cuttable_tree::MultiScaleCuttableTree,
     rng::AbstractRNG
-) where T<: Tuple{Vararg{String}}
+) where {T<:Tuple{Vararg{String}}}
     old_trees = old_multiscale_cuttable_tree[1]
     old_edges = old_multiscale_cuttable_tree[2]
     new_cuttable_trees = new_multiscale_cuttable_tree.cuttable_trees
@@ -687,7 +670,7 @@ function compute_proposed_tree_ratio(
         n1, n2 = collect(edge)
         edge_weight = get_edge_weight(subgraph, n1, n2)
         prob_backward *= edge_weight # /possible_edges;
-                                     # cancels in merged tree
+        # cancels in merged tree
         # this is now the same as above, as we have specified the edge to
         # the finest level
         # refined_edge = refined_edge([n1, n2], subgraph, rng)
@@ -701,7 +684,7 @@ function compute_proposed_tree_ratio(
 
     for level = 1:subgraph.parent.num_levels
         for key in keys(new_cuttable_trees[level])
-            old_tree_ids = [jj for jj=1:length(old_trees)
+            old_tree_ids = [jj for jj = 1:length(old_trees)
                             if haskey(old_trees[jj].cuttable_trees[level], key)]
             if length(old_tree_ids) == 0
                 continue
@@ -731,7 +714,7 @@ function compute_proposed_tree_ratio(
                 vec_edge = collect(edge)
                 refined_edge = Set(refine_edge(vec_edge, subgraph, rng))
                 prob_forward *= specified_edge_probability(refined_edge,
-                                                           subgraph)
+                    subgraph)
             end
             for old_tree_id in old_tree_ids
                 old_tree = old_trees[old_tree_id]
@@ -740,18 +723,18 @@ function compute_proposed_tree_ratio(
                     vec_edge = collect(edge)
                     refined_edge = Set(refine_edge(vec_edge, subgraph, rng))
                     prob_backward *= specified_edge_probability(refined_edge,
-                                                                subgraph)
+                        subgraph)
                 end
             end
         end
     end
-    return prob_backward/prob_forward
+    return prob_backward / prob_forward
 end
 
 """"""
 function sample_linking_edge(
-    node_set₁::Dict{Tuple{Vararg{String}}, Any},
-    node_set₂::Dict{Tuple{Vararg{String}}, Any},
+    node_set₁::Dict{Tuple{Vararg{String}},Any},
+    node_set₂::Dict{Tuple{Vararg{String}},Any},
     graph::MultiLevelGraph,
     weight::Real,
     edge_level::Int,
@@ -760,7 +743,7 @@ function sample_linking_edge(
 )
     if cur_level == edge_level
         simple_graph = graph.graphs_by_level[cur_level].simple_graph
-        choice = rand(rng)*weight
+        choice = rand(rng) * weight
         cum_sum = 0
         for node in keys(node_set₁)
             node_id = graph.partition_to_ids[cur_level][node]
@@ -768,7 +751,7 @@ function sample_linking_edge(
                 nbr = graph.id_to_partitions[cur_level][nbr_id]
                 if haskey(node_set₂, nbr)
                     edge_weight = get_edge_weight(graph, node_set₁[node],
-                                                  node_set₂[nbr], node, nbr)
+                        node_set₂[nbr], node, nbr)
                     cum_sum += edge_weight
                     if cum_sum > choice
                         return [node, nbr]
@@ -788,7 +771,7 @@ function sample_linking_edge(
         end
         node = nodes[1]
         return sample_linking_edge(node_set₁[node], node_set₂[node], graph,
-                                   weight, edge_level, rng, cur_level+1)
+            weight, edge_level, rng, cur_level + 1)
     end
 end
 
@@ -806,7 +789,7 @@ function sample_linking_edge(
 
     weight = partition.cross_district_edges[D₁, D₂, edge_level]
     edge = sample_linking_edge(node_set₁, node_set₂, partition.graph,
-                               weight, edge_level, rng)
+        weight, edge_level, rng)
     return edge
 end
 
@@ -817,7 +800,7 @@ function refine_linking_edge(
     subgraph₁::MultiLevelSubGraph,
     subgraph₂::MultiLevelSubGraph,
     rng::AbstractRNG
-) where T <: Tuple
+) where {T<:Tuple}
     @assert length(edge[1]) == length(edge[2])
 
     level = length(edge[1])
@@ -836,7 +819,7 @@ function refine_linking_edge(
     edge1_id = graph.partition_to_ids[level][edge[1]]
     edge2_id = graph.partition_to_ids[level][edge[2]]
     cum_weight = 0
-    edge_weights = Dict{Vector{Tuple}, Real}()
+    edge_weights = Dict{Vector{Tuple},Real}()
 
     for fine_edge2_id in keys(graph.fine_neighbors[level][edge1_id][edge2_id])
         fine_edge2 = graph.id_to_partitions[level+1][fine_edge2_id]
@@ -857,14 +840,14 @@ function refine_linking_edge(
         end
     end
 
-    choice = rand(rng)*cum_weight
+    choice = rand(rng) * cum_weight
     cum_sum = 0
     for (edge_key, weight) in edge_weights
         cum_sum += weight
         if cum_sum > choice
             refined_edge = edge_key
-            return refine_linking_edge(refined_edge, subgraph, subgraph₁, 
-                                   subgraph₂, rng)
+            return refine_linking_edge(refined_edge, subgraph, subgraph₁,
+                subgraph₂, rng)
         end
     end
 end
@@ -875,7 +858,7 @@ function refine_edge(
     subgraph::MultiLevelSubGraph,
     rng::AbstractRNG,
     depth::Int=-1
-) where T <: Tuple
+) where {T<:Tuple}
     if length(edge[1]) > length(edge[2])
         edge = [edge[2], edge[1]]
     end
@@ -899,7 +882,7 @@ function refine_edge(
     edge1_id = graph.partition_to_ids[level1][edge[1]]
     edge2_id = graph.partition_to_ids[level2][edge[2]]
     cum_weight = 0
-    edge_weights = Dict{Vector{Tuple}, Real}()
+    edge_weights = Dict{Vector{Tuple},Real}()
 
     if level1 == level2
         fine_neighbors = graph.fine_neighbors[level1][edge1_id][edge2_id]
@@ -924,7 +907,7 @@ function refine_edge(
             edge_weights[[nbr, edge[2]]] = weight
         end
     end
-    choice = rand(rng)*cum_weight
+    choice = rand(rng) * cum_weight
     cum_sum = 0
     for (edge_key, weight) in edge_weights
         cum_sum += weight
@@ -957,31 +940,31 @@ function sample_merged_tree2(
     subgraph₁ = partition.subgraphs[D₁]
     subgraph₂ = partition.subgraphs[D₂]
 
-    specified_edge = refine_linking_edge(edge, subgraph₁₂, subgraph₁, subgraph₂, 
-                                         rng)
+    specified_edge = refine_linking_edge(edge, subgraph₁₂, subgraph₁, subgraph₂,
+        rng)
 
     multiscale_cuttable_tree₁ = MultiScaleCuttableTree(graph.num_levels)
     multiscale_cuttable_tree₂ = MultiScaleCuttableTree(graph.num_levels)
     pop₁ = partition.dist_populations[D₁]
     pop₂ = partition.dist_populations[D₂]
-    exterior_decorators₁ = Dict{Tuple,Dict{Tuple,Int}}(specified_edge[1]=>
-                                                  Dict(specified_edge[2]=>
-                                                       pop₂))
-    exterior_decorators₂ = Dict{Tuple,Dict{Tuple,Int}}(specified_edge[2]=>
-                                                  Dict(specified_edge[1]=>
-                                                       pop₁))
+    exterior_decorators₁ = Dict{Tuple,Dict{Tuple,Int}}(specified_edge[1] =>
+        Dict(specified_edge[2] =>
+            pop₂))
+    exterior_decorators₂ = Dict{Tuple,Dict{Tuple,Int}}(specified_edge[2] =>
+        Dict(specified_edge[1] =>
+            pop₁))
     construct_cuttable_tree!(multiscale_cuttable_tree₁, subgraph₁, constraints,
-                             ext_decorators=exterior_decorators₁, rng=rng)
+        ext_decorators=exterior_decorators₁, rng=rng)
     # println("construct_cuttable_tree on D2")
     construct_cuttable_tree!(multiscale_cuttable_tree₂, subgraph₂, constraints,
-                             ext_decorators=exterior_decorators₂, rng=rng)
+        ext_decorators=exterior_decorators₂, rng=rng)
     cuttable_edges = Set{Tuple}([Tuple(edge)])
     get_all_cuttable_edges!(cuttable_edges, multiscale_cuttable_tree₁)
     get_all_cuttable_edges!(cuttable_edges, multiscale_cuttable_tree₂)
     edge_prob = get_probability_of_edge(cuttable_edges) #, edge)
 
     old_tree = ([multiscale_cuttable_tree₁, multiscale_cuttable_tree₂],
-                [Set(specified_edge)])
+        [Set(specified_edge)])
     return old_tree, edge_prob
 end
 
