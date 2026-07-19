@@ -31,11 +31,11 @@ function log_measure(
     end
     if gamma != 1
         log_forests = get_log_spanning_forests(partition)
-        log_p += (1 - gamma) * log_forests
+        log_p += (1-gamma)*log_forests
     end
     if alpha != 1
         log_linking_edges = get_log_linking_edges(partition)
-        log_p += (1 - alpha) * log_linking_edges
+        log_p += (1-alpha)*log_linking_edges
     end
 
     log_p -= get_log_energy(partition, measure, weights=weights)
@@ -62,13 +62,13 @@ end
 
 """"""
 function get_delta_energy(
-    partition::MultiLevelPartition,
+    partition::MultiLevelPartition, 
     measure::Measure,
     update::Tuple
 )
     score = 0
 
-    if length(update) == 1 && typeof(update[1]) == MultiLevelPartition
+    if length(update) == 1 && typeof(update[1])==MultiLevelPartition
         proposed_partition = update[1]
         score += get_log_energy(partition, measure)
         score -= get_log_energy(proposed_partition, measure)
@@ -82,7 +82,7 @@ function get_delta_energy(
             continue
         end
         energy = measure.scores[ii]
-        score += weight * energy(partition, changed_districts)
+        score += weight*energy(partition, changed_districts)
     end
 
     old_dists = [partition.district_to_nodes[cd] for cd in changed_districts]
@@ -100,7 +100,7 @@ function get_delta_energy(
             continue
         end
         energy = measure.scores[ii]
-        score -= weight * energy(partition, changed_districts)
+        score -= weight*energy(partition, changed_districts)
     end
     for (ii, cd) in enumerate(changed_districts)
         partition.district_to_nodes[cd] = old_dists[ii]
@@ -114,9 +114,9 @@ end
 
 """"""
 function get_log_energy(
-    partition::MultiLevelPartition,
+    partition::MultiLevelPartition, 
     measure::Measure;
-    weights::Union{Vector,Nothing}=nothing
+    weights::Union{Vector, Nothing}=nothing
 )
     score = 0
     if weights == nothing
@@ -128,7 +128,7 @@ function get_log_energy(
             continue
         end
         energy = measure.scores[ii]
-        score += weight * energy(partition)
+        score += weight*energy(partition)
     end
     return score
 end
@@ -162,15 +162,15 @@ function get_cut_edge_weights(
         nbr_district = get_district(partition, nbr)
         if nbr_district == nothing
             cut_edge_sum += get_cut_edge_weights(partition, node, district,
-                fine_nbr_ids_near_node[nbr_id],
-                column, level + 1)
+                                                 fine_nbr_ids_near_node[nbr_id],
+                                                 column, level+1)
         elseif nbr_district < district
             node_level = length(node)
             full_graph = graph.graphs_by_level[level]
             simple_graph = full_graph.simple_graph
             for nbr_nbr_id in neighbors(simple_graph, nbr_id)
                 nbr_nbr = graph.id_to_partitions[level][nbr_nbr_id]
-                if nbr_nbr[1:node_level] == node
+                if nbr_nbr[1:node_level]==node
                     edge = Set([nbr_id, nbr_nbr_id])
                     cut_edge_sum += full_graph.edge_attributes[edge][column]
                 end
@@ -200,8 +200,8 @@ function get_cut_edge_weights(
                 fine_nbr_ids_near_node = graph.fine_neighbors[level][node_id]
                 fine_nbr_ids_near_node = fine_nbr_ids_near_node[nbr_id]
                 cut_edge_sum += get_cut_edge_weights(partition, node, district,
-                    fine_nbr_ids_near_node,
-                    column, level + 1)
+                                                     fine_nbr_ids_near_node,
+                                                     column, level+1)
             elseif nbr_district < district
                 edge = Set([node_id, nbr_id])
                 cut_edge_sum += full_graph.edge_attributes[edge][column]
@@ -264,9 +264,9 @@ function get_log_spanning_trees(
     if level < subgraph.parent.num_levels
         for node in keys(node_set)
             log_spanning_trees += get_log_spanning_trees(subgraph,
-                node_tree_counts,
-                node_set[node], node,
-                level + 1)
+                                                         node_tree_counts,
+                                                         node_set[node], node,
+                                                         level+1)
         end
     end
     return log_spanning_trees
@@ -291,12 +291,12 @@ function get_log_linking_edges(
             else
                 max_connections = maximum(cross_district_edges[di, dj, ii]
                                           for ii = 1:num_levels)
-                adjacent_huh = max_connections != 0
+                adjacent_huh = max_connections!=0
                 if !adjacent_huh
                     continue
                 elseif !exists_hierarchical_tree(district_to_nodes[di],
-                    district_to_nodes[dj],
-                    num_levels)
+                                                  district_to_nodes[dj],
+                                                  num_levels)
                     continue
                 end
                 level = maximum(ii for ii = 1:num_levels
